@@ -42,10 +42,11 @@ En macOS/Linux:
 source venv/bin/activate
 ```
 3. **Instala las dependencias**
+```bash
 pip install -r requirements.txt
+```
 
-
-4. **Ejecuta la aplicación**
+5. **Ejecuta la aplicación**
 ```bash
 python .\index.py
 ```
@@ -71,23 +72,41 @@ python .\index.py
 
 ## Estructura del Proyecto 📁
 backpacker-ai/
+
 ├── static/
+
 │ ├── images/
+
 │ │ ├── frog.jpg
+
 │ │ ├── mountains.jpg
+
 │ │ └── sunset.jpg
+
 ├── templates/
+
 │ ├── base.html
+
 │ ├── index.html
+
 │ ├── chat.html
+
 │ └── visit.html
+
 ├── utils/
+
 │ ├── llama_handler.py
+
 │ ├── overpass_api.py
+
 │ └── geo_utils.py
+
 ├── config.py
+
 ├── index.py
+
 └── requirements.txt
+
 
 
 ## Requisitos 📋
