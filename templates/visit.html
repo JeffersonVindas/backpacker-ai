@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="visit-container">
+    <div class="container mt-4">
+        <h1 class="text-center mb-4 text-white">Descubre lugares cercanos</h1>
+
+        <!-- Contenedor de búsqueda -->
+        <div class="search-container">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <input type="text" 
+                               id="placeInput" 
+                               class="form-control" 
+                               placeholder="Buscar un lugar específico...">
+                        <button class="btn btn-dark" 
+                                onclick="searchByPlace()">
+                            Buscar
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <button class="btn btn-dark w-100" 
+                            onclick="getCurrentLocation()">
+                        Usar mi ubicación actual
+                    </button>
+                </div>
+                <div class="col-12">
+                    <button class="btn btn-dark" onclick="showPlacesSummary()">
+                        Ver resumen de lugares
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mapa y resultados -->
+        <div class="map-container" style="display: none;">
+            <div id="map"></div>
+        </div>
+        <div id="loadingMessage" class="alert alert-info mt-3" style="display: none;">
+            Buscando lugares...
+        </div>
+        <div id="placesList" class="place-list"></div>
+    </div>
+</div>
+
+<style>
+.visit-container {
+    min-height: 100vh;
+    background-image: url("{{ url_for('static', filename='images/sunset.jpg') }}");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    position: relative;
+    padding: 20px 0;
+}
+
+.visit-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1;
+}
+
+.container {
+    position: relative;
+    z-index: 2;
+}
+
+.search-container {
+    margin: 20px 0;
+    padding: 20px;
+    background-color: rgba(248, 249, 250, 0.85);
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.map-container {
+    height: 500px;
+    width: 100%;
+    margin-top: 20px;
+    border-radius: 8px;
+    overflow: hidden;
+    display: none;
+}
+
+#map {
+    height: 100%;
+    width: 100%;
+    background: white;
+}
+
+.place-list {
+    margin-top: 20px;
+}
+
+.place-item {
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.85);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.alert {
+    background-color: rgba(255, 255, 255, 0.85);
+}
+
+/* Ajustes para los botones */
+.btn-dark {
+    background-color: #212529;
+    border-color: #212529;
+    transition: all 0.3s ease;
+}
+
+.btn-dark:hover {
+    background-color: #1a1e21;
+    border-color: #1a1e21;
+    transform: translateY(-2px);
+}
+
+/* Ajustes para el input */
+.form-control {
+    border: 1px solid #ced4da;
+}
+
+.form-control:focus {
+    border-color: #212529;
+    box-shadow: 0 0 0 0.25rem rgba(33, 37, 41, 0.25);
+}
+</style>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script>
+    let map;
+    let markers = [];
+
+    function initMap(latitude, longitude) {
+        const mapContainer = document.querySelector('.map-container');
+        mapContainer.style.display = 'block';
+        
+        // Destruir el mapa existente si hay uno
+        if (map) {
+            map.remove();
+            map = null;
+        }
+        
+        // Crear nuevo mapa
+        setTimeout(() => {
+            map = L.map('map', {
+                center: [latitude, longitude],
+                zoom: 15,
+                zoomControl: true,
+                scrollWheelZoom: true
+            });
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+            
+            // Agregar marcador
+            L.marker([latitude, longitude])
+                .bindPopup('Ubicación seleccionada')
+                .addTo(map);
+            
+            // Forzar actualización
+            map.invalidateSize(true);
+        }, 100);
+    }
+
+    async function searchByPlace() {
+        const placeInput = document.getElementById('placeInput');
+        const loadingMessage = document.getElementById('loadingMessage');
+        const place_name = placeInput.value.trim();
+        
+        if (!place_name) {
+            alert('Por favor ingrese un lugar para buscar');
+            return;
+        }
+        
+        loadingMessage.style.display = 'block';
+        loadingMessage.textContent = 'Buscando lugar...';
+        
+        try {
+            const response = await fetch('/geocode', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ place_name: place_name })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                initMap(data.latitude, data.longitude);
+                
+                if (data.places && data.places.length > 0) {
+                    displayPlaces(data.places);
+                    loadingMessage.style.display = 'none';
+                } else {
+                    loadingMessage.textContent = 'No se encontraron lugares de interés en esta ubicación';
+                }
+            } else {
+                loadingMessage.textContent = data.error || 'Error al buscar el lugar';
+                loadingMessage.className = 'alert alert-danger mt-3';
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            loadingMessage.textContent = 'Error al procesar la solicitud';
+            loadingMessage.className = 'alert alert-danger mt-3';
+        }
+    }
+
+    function displayPlaces(places) {
+        const placesList = document.getElementById('placesList');
+        placesList.innerHTML = '';
+        
+        // Limpiar marcadores existentes si hay un mapa
+        if (map) {
+            markers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+        }
+        
+        places.forEach(place => {
+            // Crear marcador en el mapa si existe
+            if (map) {
+                const marker = L.marker([place.latitude, place.longitude])
+                    .bindPopup(`
+                        <strong>${place.name}</strong><br>
+                        Tipo: ${place.type}<br>
+                        ${place.description ? `Descripción: ${place.description}<br>` : ''}
+                        ${place.opening_hours ? `Horario: ${place.opening_hours}<br>` : ''}
+                        ${place.website ? `<a href="${place.website}" target="_blank">Sitio web</a>` : ''}
+                    `)
+                    .addTo(map);
+                markers.push(marker);
+            }
+            
+            // Crear elemento en la lista
+            const placeDiv = document.createElement('div');
+            placeDiv.className = 'place-item';
+            placeDiv.innerHTML = `
+                <h3>${place.name}</h3>
+                <p><strong>Tipo:</strong> ${place.type}</p>
+                ${place.description ? `<p><strong>Descripción:</strong> ${place.description}</p>` : ''}
+                ${place.website ? `<p><a href="${place.website}" target="_blank" class="btn btn-link">Sitio web</a></p>` : ''}
+                ${place.opening_hours ? `<p><strong>Horario:</strong> ${place.opening_hours}</p>` : ''}
+                <button class="btn btn-primary btn-sm" onclick="centerMapOn(${place.latitude}, ${place.longitude})">
+                    Ver en mapa
+                </button>
+            `;
+            placesList.appendChild(placeDiv);
+        });
+        
+        // Forzar actualización del mapa después de agregar todos los marcadores
+        if (map) {
+            map.invalidateSize(true);
+        }
+    }
+
+    function centerMapOn(lat, lng) {
+        map.setView([lat, lng], 17);
+    }
+
+    function getCurrentLocation() {
+        const loadingMessage = document.getElementById('loadingMessage');
+        loadingMessage.style.display = 'block';
+        loadingMessage.textContent = 'Obteniendo tu ubicación...';
+        loadingMessage.className = 'alert alert-info mt-3';
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    const latitude = position.coords.latitude;
+                    const longitude = position.coords.longitude;
+                    initMap(latitude, longitude);
+                    searchNearbyPlaces(latitude, longitude);
+                },
+                function(error) {
+                    loadingMessage.textContent = 'Error al obtener la ubicación: ' + error.message;
+                    loadingMessage.className = 'alert alert-danger mt-3';
+                }
+            );
+        } else {
+            loadingMessage.textContent = 'Tu navegador no soporta geolocalización';
+            loadingMessage.className = 'alert alert-danger mt-3';
+        }
+    }
+
+    // Iniciar con la ubicación actual cuando se carga la página
+    window.onload = getCurrentLocation;
+
+    async function showPlacesSummary() {
+        const loadingMessage = document.getElementById('loadingMessage');
+        loadingMessage.style.display = 'block';
+        loadingMessage.textContent = 'Cargando resumen...';
+        
+        try {
+            const response = await fetch('/places-summary');
+            const data = await response.json();
+            
+            // Mostrar el resumen en un alert de Bootstrap
+            const summaryDiv = document.createElement('div');
+            summaryDiv.className = 'alert alert-info mt-3';
+            summaryDiv.style.whiteSpace = 'pre-line';  // Preservar saltos de línea
+            summaryDiv.textContent = data.summary;
+            
+            // Reemplazar el mensaje de carga con el resumen
+            loadingMessage.style.display = 'none';
+            document.getElementById('placesList').prepend(summaryDiv);
+            
+        } catch (error) {
+            console.error('Error:', error);
+            loadingMessage.textContent = 'Error al cargar el resumen';
+            loadingMessage.className = 'alert alert-danger mt-3';
+        }
+    }
+
+    // Asegurarse de que el mapa se actualice cuando la ventana cambie de tamaño
+    window.addEventListener('resize', function() {
+        if (map) {
+            map.invalidateSize(true);
+        }
+    });
+</script>
+{% endblock %}
